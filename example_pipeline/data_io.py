@@ -9,11 +9,20 @@ import numpy as np
 import pandas
 
 from argparse import ArgumentParser
-from collections import Iterable
+try:
+    # python < 3.3
+    from collections import Iterable
+except ImportError:
+    # python >= 3.3
+    from collections.abc import Iterable
 from pyedflib import EdfReader
 from six import ensure_str
 
-from somnotate._utils import convert_state_intervals_to_state_vector
+from somnotate._utils import (
+    convert_state_intervals_to_state_vector,
+    convert_state_vector_to_state_intervals,
+)
+
 
 def check_dataframe(df, columns, column_to_dtype=None):
     """
@@ -161,7 +170,7 @@ def _load_edf_channels(signal_labels, edf_reader):
     return output_array.transpose()
 
 
-def load_state_vector(file_path, mapping):
+def load_state_vector(file_path, mapping, time_resolution=1):
     """
     Load hypnogram given in visbrain Stage-duration format, and convert to a state vector.
 
@@ -187,9 +196,11 @@ def load_state_vector(file_path, mapping):
     states, intervals = load_hypnogram(file_path)
 
     from somnotate._utils import convert_state_intervals_to_state_vector
-    state_vector = convert_state_intervals_to_state_vector(states, intervals, mapping=mapping)
+    state_vector = convert_state_intervals_to_state_vector(
+        states, intervals, mapping=mapping, time_resolution=time_resolution)
 
     return state_vector
+
 
 @_handle_file_path
 def _load_visbrain_hypnogram(file_path):
@@ -219,6 +230,40 @@ def _load_visbrain_hypnogram(file_path):
     transitions = np.r_[0, data['stop']]
     intervals = list(zip(transitions[:-1], transitions[1:]))
     return states, intervals
+
+
+@_handle_file_path
+def _load_state_list(filepath, mapping={"W" : "awake", "N" : "non-REM", "R" : "REM"}, time_resolution=10, header=0):
+    """
+    Load hypnogram given as a epoch list in CSV format.
+
+    Arguments:
+    ----------
+    file_path -- str
+        /path/to/hypnogram/file.csv
+        A list of states by epoch. Assumes that each row corresponds to one epoch, and each epoch has the same duration.
+
+    mapping -- dict
+        Maps state names used in the CSV to state names used within the pipeline.
+
+    time_resolution -- int
+        Epoch length in seconds.
+
+    Returns:
+    --------
+    states -- list of str
+        List of annotated states.
+
+    intervals -- list of (float start, float stop) tuples
+        Corresponding time intervals.
+    """
+
+    df = pandas.read_csv(filepath, header=header)
+    state_vector = df.iloc[:, 0].values.tolist()
+    states, intervals = convert_state_vector_to_state_intervals(
+        state_vector, time_resolution=time_resolution, mapping=mapping)
+    return states, intervals
+
 
 @_handle_file_path
 def _export_visbrain_hypnogram(file_path, states, intervals, total_time=None, data_file=None):
@@ -291,6 +336,7 @@ def _export_visbrain_hypnogram(file_path, states, intervals, total_time=None, da
 
     with open(file_path, 'w') as f:
         f.write(export_string)
+
 
 @_handle_file_path
 def export_review_intervals(file_path, intervals, scores=None, notes=None):

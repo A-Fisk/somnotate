@@ -1,0 +1,4 @@
+numpy<1.25.0
+matplotlib
+scikit-learn
+pomegranate<1.0.0

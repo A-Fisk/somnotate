@@ -224,11 +224,6 @@ class TimeSeriesStateViewer(object):
         ---------------
         Enter valid float and press enter; backspace to clear memory.
 
-        Contact:
-        ========
-        Please raise any issues you encounter at:
-        www.github.com/paulbrodersen/time_series_annotator/issues
-
         """
         print(help_string)
 
@@ -588,20 +583,9 @@ class TimeSeriesStateViewer(object):
 
 
     def _update_selection(self, selection_lower_bound, selection_upper_bound):
-        vertices = self.rect.get_xy()
-        # vertices are returned in the following order
-        #     - lower-left
-        #     - upper-left
-        #     - upper-right
-        #     - lower-right
-        #     - lower-left
-
-        # set new x-values for vertices
-        vertices[[0, 1, -1], 0] = selection_lower_bound
-        vertices[[2, 3],     0] = selection_upper_bound
-
         # update rectangle coordinates and epoch bounds
-        self.rect.set_xy(vertices)
+        self.rect.set_xy((selection_lower_bound, 0))
+        self.rect.set_width(selection_upper_bound - selection_lower_bound)
         self.selection_lower_bound = selection_lower_bound
         self.selection_upper_bound = selection_upper_bound
         self.figure.canvas.draw_idle()

@@ -1,28 +1,230 @@
-# somnotate
+# Somnotate
 
-Automatically annotate vigilance states from timeseries data such
-electroencephalograms (EEGs), electromyograph (EMG), or local field
-potentials (LFPs).
+*Automated polysomnography for experimental animal research: annotate vigilance states from arbitrary time series data.*
 
-The approach taken here consists of two parts: linear discriminant
-analysis (LDA) and a hidden Markov model (HMM). Linear discriminant
-analysis (LDA) performs automatic feature selection by projecting the
-high-dimensional time series data to a lower dimensional feature space
-that is optimal for state classification using hard, linear decision
-boundaries. However, instead of applying these decision boundaries
-immediately, the transformed time series data is annotated using a
-hidden Markov model. This allows for "soft" decision boundaries that
-apart from the feature values of each sample also take contextual
-information into account. This contextual information includes the
-surrounding state sequence and the previously learnt state transition
-frequencies.
+Somnotate combines linear discriminant analysis (LDA) with a hidden
+Markov model (HMM). Linear discriminant analysis performs automatic
+feature selection by projecting the high-dimensional time series data
+to a lower dimensional feature space that is optimal for state
+classification using hard, linear decision boundaries. However,
+instead of applying these decision boundaries immediately, the
+transformed time series data is annotated using a hidden Markov
+model. This allows for "soft" decision boundaries that in addition of
+the features of each sample also take contextual information into
+account. This approach results in a fast, fully automated state
+annotation that is typically more accurate than manual annotations by
+human experts, while being remarkably robust to mislabelled training
+data, artefacts, and other outliers.
 
-The combination of these two algorithms results in a fast, automated
-state annotation that has a high accuracy compared to a human
-consensus state sequence. Furthermore, this approach is remarkably
-robust to mislabelled training data, artefacts, and other outliers.
+A journal article thoroughly describing Somnotate and characterising
+its performance is published PLoS Computationally Biology, available
+[here](https://doi.org/10.1371/journal.pcbi.1011793). The data
+underpinning the presented results is archived [at
+Zenodo](https://doi.org/10.5281/zenodo.10200481). While the article
+focuses on Somnotate's performance in polysomnography based on mouse
+EEG, EMG, and/or LFP data, Somnotate has been applied successfully to
+human clinical data, as well as telemetry data from hibernating
+Alaskan black bears. As the core components of Somnotate are
+completely agnostic to the data modality, Somnotate can also be
+applied to other indicators of vigilance state, such as heart rate,
+blood pressure, or actigraphy. While we have performed encouraging
+pilot tests in these directions, we lack access to annotated data
+repositories that are comprehensive enough for a proper evaluation (do
+be in touch if you have data and you would like to collaborate).
+
+
+## Citing Somnotate
+
+If you use Somnotate in your scientific work, I would appreciate citations to the following paper:
+
+Brodersen PJN, Alfonsa H, Krone LB, Blanco-Duque C, Fisk AS, Flaherty SJ, et al. (2024) Somnotate: A probabilistic sleep stage classifier for studying vigilance state transitions. PLoS Comput Biol 20(1): e1011793. https://doi.org/10.1371/journal.pcbi.1011793
+
+Bibtex entry:
+
+```bibtex
+@article{10.1371/journal.pcbi.1011793,
+    doi = {10.1371/journal.pcbi.1011793},
+    author = {Brodersen, Paul J. N. AND Alfonsa, Hannah AND Krone, Lukas B. AND Blanco-Duque, Cristina AND Fisk, Angus S. AND Flaherty, Sarah J. AND Guillaumin, Mathilde C. C. AND Huang, Yi-Ge AND Kahn, Martin C. AND McKillop, Laura E. AND Milinski, Linus AND Taylor, Lewis AND Thomas, Christopher W. AND Yamagata, Tomoko AND Foster, Russell G. AND Vyazovskiy, Vladyslav V. AND Akerman, Colin J.},
+    journal = {PLOS Computational Biology},
+    publisher = {Public Library of Science},
+    title = {Somnotate: A probabilistic sleep stage classifier for studying vigilance state transitions},
+    year = {2024},
+    month = {01},
+    volume = {20},
+    pages = {1-26},
+    number = {1},
+    url = {https://doi.org/10.1371/journal.pcbi.1011793},
+}
+```
+
+
+## Is this software the right choice for me?
+
+Somnotate is designed to support animal experimental research, and
+hence a core assumption is that the data is peculiar in some way: the
+recording setup might be non-standard, the experimental manipulation
+might be severe, the genotype and (sleep) phenotype of the animals
+might be deviant, or the animal model might be entirely non-standard
+(such as black bears). As a consequence, machine learning models that
+have been pre-trained on other data are of limited use, and you have
+to train your own model using data annotated by yourself or your
+colleagues. Somnotate has been designed with two aims in mind: (1)
+minimise the amount of manually annotated data required to surpass the
+accuracy of human experts, and (2) make model training simple enough
+that any motivated scientist can optimise and use the software to its
+fullest potential without requiring prior programming experience or
+machine learning knowledge.
+
+These aims motivate the use of hidden Markov models as the core
+classifier over and above deep neural networks, as the latter
+necessitate 2-3 orders of magnitude more data to train, and have a
+number of hyperparameters that have to be tailored to each data set
+for optimal results. A welcome side effect of this core design
+decision is that Somnotate -- unlike most other polysomnography
+software -- computes the likelihood of each vigilance state for each
+epoch (rather than just determining the most likely one). This allows
+the identification of intermediate states that occur around vigilance
+state transitions and failed transition attempts. Analysis of
+intermediate states can yield unique insights into the dynamics of
+vigilance state transitions. They may also provide a more sensitive
+readout for experimental manipulations than, for example, the total
+time spent in each vigilance state, as such traditional measures of
+sleep quality might be more strongly controlled by the physiological
+needs of the animal.
+
+For annotating human clinical data, Somnotate likely is not the
+optimal choice. The acquisition of human clinical data is relatively
+standardised, and large repositories with annotated data are freely
+available. These have been used to train sophisticated machine
+learning models, such as U-Sleep and its successors, that are readily
+available and which you should use instead (unless you are interested
+in intermediate states).
+
+
+## What do I need?
+
+### Recordings
+
+To train the classifier, you will need manually annotated
+recordings. With a small data set, selecting the right recordings for
+training can have a significant impact on performance. In general, the
+performance of the classifier depends on (1) how well it is able to
+estimate the mean and the variance of all provided features in the
+training data set, and (2) how well the (automatically selected)
+subset of features used for inference matches between the training and
+the test data sets. Here are a few notes that spell out what that
+means in practice:
+
+1. The variance between recordings from different animals is typically
+   greater than the variance within one long recording from one
+   animal. Training on shorter recordings from multiple animals is
+   hence preferable to training on longer recordings from fewer
+   animals. In our experiments, training on manually annotated
+   recordings from five or six different animals represented a
+   sweet-spot, where adding further training data yielded strongly
+   diminishing returns in performance improvements.
+
+2. The length of the recordings is less important, as long as the
+   recordings are continuous (splicing introduces artefacts) and cover
+   the full spectrum of vigilance and arousal states (i.e. light NREM
+   sleep, deep NREM sleep, REM sleep, awake & rested, awake with high
+   sleep pressure, etc.). For laboratory animals on a 12-hours
+   light-on / 12-hours light-off cycle, 12-hour recordings covering
+   the cycle half dominated by sleep (the light-on phase in mice) is
+   probably sufficient for training: in our tests, training on 24-hours
+   recordings only marginally improved performance, but not
+   statistically significantly so.
+
+3. Do not exclusively use "clean" recordings for training, as
+   underestimates of feature variance can negatively impact feature
+   selection. Training on data sets with normal or even sub-standard
+   signal-to-noise ratios may improve the robustness of the
+   classifier, as features affected by artefacts or noise are typically
+   weighted down, and thus affect inference less.
+
+4. It is often sufficient to train on recordings from control
+   experiments, and then apply the classifier to both, recordings from
+   control experiments and recordings acquired during experimental
+   manipulations. In this way, a single classifier can be applied to
+   data from multiple experiments. However, if the different
+   conditions alter the physiology of the animal strongly, the
+   characteristics of the data may become too distinct. It may be
+   necessary to either (1) train multiple classifiers, one for each
+   condition, or (2) train one classifier on data from both
+   conditions. The first approach tends to work a little bit better
+   than the second approach but requires more annotated data sets. If
+   you use the second approach, ensure that both conditions are
+   represented equally in the training data.
+
+The provided example pipeline expects recordings to be in the
+[European data format (EDF)](https://www.edfplus.info/specs/edf.html).
+
+### Manual Annotations
+
+Annotations are expected to be in
+[Visbrain's](https://github.com/EtienneCmb/visbrain) [stage-duration
+format](http://visbrain.org/sleep.html#hypnogram). This is a very
+simple text file with the first line specifying the length of the
+corresponding recording in seconds, and the second line specifying the
+file name of the recording (or `Unspecified`). The remaining lines
+list each state and its end-point since the start of the recording in
+seconds. In the example below, the duration of the first occurrence of
+`Awake` is 1 minute, the duration of the following `NREM` period is 2
+minutes, and the duration of the following `REM` period is 3
+minutes. The label `Undefined` should be used if no state assignment
+is appropriate, for example at the start of the recording when the
+electrodes aren't connected, yet; do not use `Undefined` to denote
+artefacts, as this will result in overestimates of the state
+transition frequencies. List only one state per line. Use a single tab
+to separate items within a line. The last entry in the file should
+match the duration specified on the first line.
+
+```
+*Duration_sec	43200.0
+*Datafile	Unspecified
+Undefined	10.0
+Awake	70.0
+NREM	190.0
+REM	370.0
+Awake	372.0
+NREM	672.0
+...
+Awake	42000.0
+Undefined	43200.0
+```
+
+The quality of the annotations is not particularly important, as
+Somnotate is highly robust to errors in the training data. In the
+journal article linked above, we used data sets annotated by up to 10
+experienced sleep researchers to show that Somnotate was able to match
+the human consensus better than any individual expert in
+testing. However, for the purpose of training, using a single manual
+annotation per recording is fine. When we tested Somnotate's
+robustness to errors in the training data, performance was unaffected,
+even if a large fraction of the data used for training was
+deliberately mislabelled (up to 50% of all epochs).
+
+### Operating System and Computational Hardware Requirements
+
+Somnotate was developed under Linux but also runs on Windows and
+iOS. No dedicated hardware is required, as even a simple laptop should
+complete all tasks within a reasonable time, provided it has
+sufficient RAM to load a single recording into memory. As a rough
+guide, after pre-processing, training and testing should not require
+more than 1-2 seconds per 24 hours of recordings on any but the most
+ancient hardware. The time it takes to preprocess a data set is highly
+variable and depends on the file format, number of signals, and their
+sampling frequency. Preprocessing recordings in EDF file format with
+three signals at 256 Hz requires about 30 seconds per 24 hours.
+
 
 ## Installation instructions
+
+> [!CAUTION]
+> Somnotate used to support installation via pip (and encouraged it in fact).
+> Currently, however, this results either in dependency conflicts or in broken builds for some of somnotate's dependencies, especially pomegranate.
+> For the time being, please follow the installation instructions for conda below.
+
 
 1. Clone this repository. Git is available
    [here](https://git-scm.com/downloads).
@@ -30,10 +232,9 @@ robust to mislabelled training data, artefacts, and other outliers.
     ```shell
     git clone https://github.com/paulbrodersen/somnotate.git
     ```
-
-    Alternatively, you can just download the repository as a zip file,
-    and unzip it. However, you will have to repeat this process each
-    time a new version is released. If you use git, you can update the
+    Alternatively, you can download the repository as a zip file, and
+    unzip it. However, you will have to repeat this process each time
+    a new version is released. If you use git, you can update the
     repository simply by changing to anywhere in the somnotate
     directory and running `git pull`.
 
@@ -42,20 +243,18 @@ robust to mislabelled training data, artefacts, and other outliers.
     git pull
     ```
 
-2. Optionally, create a clean virtual environment.
+2. Create a clean virtual environment using conda (available [here](https://www.anaconda.com)).
 
-   For example, to create a clean virtual environment using conda
-   (available
-   [here](https://www.anaconda.com/distribution/#download-section)),
-   open a terminal (on Windows: Anaconda Prompt), and enter:
+   Open a terminal (on Windows: Anaconda Prompt), and enter:
 
-   ``` shell
-   conda create --no-default-packages -n my_somnotate_virtual_environment_name python
+   ```shell
+   conda create --no-default-packages --name somnotate_env
    ```
 
     Then activate the environment:
-   ``` shell
-   conda activate my_somnotate_virtual_environment_name
+
+   ```shell
+   conda activate somnotate_env
    ```
 
    You will need to re-activate the environment each time you want to
@@ -63,53 +262,18 @@ robust to mislabelled training data, artefacts, and other outliers.
 
 3. Install all required dependencies.
 
-    Using conda:
+    ```shell
+    conda install -c conda-forge pomegranate=0.14.4 numpy scipy matplotlib scikit-learn six pandas pyedflib lspopt
+    ```
+
+4. Add somnotate/somnotate to the environment's PYTHONPATH:
+
     ```shell
     cd /path/to/somnotate
-    conda install --file ./somnotate/requirements.txt
-    conda install -c conda-forge pyedflib
-    conda install --file ./example_pipeline/requirements.txt
+    pip install -e .
     ```
 
-    Using pip:
-    ``` shell
-    cd /path/to/somnotate
-    pip install -r ./somnotate/requirements.txt
-    pip install -r ./example_pipeline/requirements.txt
-    ```
-
-    However, if you use `pip` and you don't have a C++ compiler, the
-    installation will fail for `pyedflib`, which is used in the
-    pipeline to load EDF files.  On Windows, you will need to install
-    the "Build tools for Visual Studio"; on MacOS, you will need to
-    install the "Command Line Tools for Xcode". Then rerun the last
-    command.
-
-4.  Install all optional dependencies.
-
-    The example pipeline has one optional dependency, `lspopt`, which
-    is used to compute multitaper spectrograms. At the time of
-    writing, the module is not avalaible on the PIPy or anaconda
-    servers, so please follow the installation instructions on [the
-    github homepage of the lspopt project](https://github.com/hbldh/lspopt).
-    Currently, the easiest way is to use pip and git:
-
-    ```shell
-    pip install git+https://github.com/hbldh/lspopt.git#egg=lspopt
-    ```
-
-5. Ensure that the somnotate folder is in your PYTHONPATH environment variable.
-
-    In most python environments, it suffices to change the working
-    directory to the somnotate root folder. If you are using Anaconda,
-    you have to explicitly add the somnotate root directory to your
-    PYTHONPATH environment variable:
-
-    ``` shell
-    conda develop /path/to/somnotate
-    ```
-
-## Quickstart guide
+## Quickstart Guide / Cheat Sheet
 
 Assuming you have two sets of data sets, a set of previously
 (manually) annotated data sets for training of the pipeline (data sets
@@ -143,15 +307,13 @@ python /path/to/somnotate/example_pipeline/04_run_state_annotation.py /path/to/s
 python /path/to/somnotate/example_pipeline/05_manual_refinement.py /path/to/spreadsheet_B.csv
 ```
 
-## Documentation
+## Detailed Description of the Pipeline
 
 This repository comes in two parts, the core library, `somnotate`, and
 an example pipeline. The core library implements the functionality to
 automatically (or manually) annotate states using any type of time
-series data "emitted" by these states, and visualize the results. The
-core library supports (and is designed for) interactive use. However,
-there is nothing specific to sleep staging in this part of the code
-base.
+series data, and visualize the results. However, there is nothing
+specific to sleep staging in this part of the code base.
 
 The example pipeline is a collection of functions and scripts that
 additionally manage data import/export, data preprocessing, and
@@ -159,21 +321,11 @@ testing. The pipeline supports (and is designed for) batch processing
 of multiple files. **For most users, the pipeline is the part of the
 code base they will interact with.**
 
-### The pipeline
-
-#### Scope / Content
+### Content
 
 Currently available scripts are:
 
-1. `00_convert_sleepsign_files.py`
-
-    Extract the hypnogram from SleepSign FFT files (created in
-    SleepSign via: Analysis -> FFT-Text Output -> Continuous FFT), and
-    convert them to hypnogram in the [visbrain stage-duration
-    format](http://visbrain.org/sleep.html#hypnogram). If you already
-    have hypnograms in this format, this step is not necessary.
-
-2. `01_preprocess_signals.py`
+1. `01_preprocess_signals.py`
 
     Convert the raw signals into features that are useful for the
     state inference. Currently, we simply (1) compute the spectrogram
@@ -182,34 +334,34 @@ Currently available scripts are:
     power is approximately normally distributed, and (3) trim the
     spectrogram to exclude frequencies for which our estimate is very
     noisy, i.e. frequencies near the Nyquist limit and frequencies
-    around 50 Hz. Finally, we concatenate the spectrograms into one
-    set of features.
+    around 50 Hz. Finally, we concatenate the spectrograms of the
+    difference signals into one set of features.
 
-3. `02_test_state_annotation.py`
+2. `02_test_state_annotation.py`
 
    Test the performance of the automated state annotation in a
    hold-one-out fashion on a given set of preprocessed training data
    sets (i.e. preprocessed data with corresponding manually created
    state annotations).
 
-4. `03_train_state_annotation.py`
+3. `03_train_state_annotation.py`
 
-   Train a model (LDA + HMM) using a set of preprocessed training data
-   sets and export it for later use.
+   Train a model using a set of preprocessed training data sets and
+   export it for later use.
 
-5. `04_run_state_annotation.py`
+4. `04_run_state_annotation.py`
 
    Use a previously trained model to automatically annotate the states in
    a given set of preprocessed data sets.
 
-6. `05_manual_refinement.py`
+5. `05_manual_refinement.py`
 
    This script launches a simple GUI that facilitates manual quality
    control and refinement of the automatically generated state
    annotations. Press the key "?" to read the documentation for all
    available commands.
 
-7. `06_compare_state_annotations.py`
+6. `06_compare_state_annotations.py`
 
    This script launches a simple GUI that facilitates manual checking
    of all differences between two state annotations, e.g. the a manual
@@ -217,7 +369,13 @@ Currently available scripts are:
    Press the key "?" to read the documentation for all
    available commands.
 
-Apart from these scripts, there are two additional files, `data_io.py` and `configuration.py`
+7. `07_compute_state_probabilities.py`
+
+   Use a previously trained model to compute the probability of each
+   state for each sample in a given set of preprocessed data sets.
+
+
+Apart from these scripts, there are two additional files in `example_pipeline`:
 
 - `data_io.py`
 
@@ -230,8 +388,21 @@ Apart from these scripts, there are two additional files, `data_io.py` and `conf
     hypnograms, their represantation internally in the pipeline, and
     their visualisation in the plots created by the pipeline.
 
+The `extensions` folder has two additional scripts to facilitate data I/O:
 
-#### Examples
+- `convert_sleepsign_files.py`
+
+    Extract the hypnogram from SleepSign FFT files (created in
+    SleepSign via: Analysis -> FFT-Text Output -> Continuous FFT), and
+    convert them to hypnogram in the stage-duration format. If you already
+    have hypnograms in this format, this step is not necessary.
+
+- `convert_hypnogram_to_matlab_struct.py`
+
+    Convert hypnograms in stage-duration format to MATLAB structs.
+
+
+### Examples
 
 Each script in the pipeline expects as mandatory command line argument
 a path to a spreadsheet in CSV format. The exact format of the
@@ -244,7 +415,7 @@ pipeline. An example CSV file is provided with the test data.
 For example:
 
 ``` shell
-python /path/to/somnotate/example_pipeline/00_convert_sleepsign_files.py /path/to/spreadsheet.csv
+python /path/to/somnotate/example_pipeline/01_preprocess_signals.py /path/to/spreadsheet.csv
 ```
 
 Some scripts (specifically, `03_train_state_annotation.py` and
@@ -271,11 +442,11 @@ and optional arguments can be accessed using the `--help` argument:
 python /path/to/somnotate/example_pipeline/script.py --help
 ```
 
-#### The spreadsheet
+### The Spreadsheet
 
 For each data set, the spreadsheet details a number of properties, as
 well as the paths to the corresponding input and output files. By
-accessing these parameters via a spreadsheet, the user does not have
+providing these parameters via a spreadsheet, the user does not have
 to manually provide these arguments repeatedly to each script in the
 pipeline. Furthermore, it ensures that the arguments remain consistent
 across tasks.
@@ -297,6 +468,8 @@ details all parameters, i.e. contains all columns. These are:
   the (desired) path to the file containing the automated state annotion (hypnogram) that has subsequently been manually refined
 - `file_path_review_intervals`:
   the (desired) path for the file containing the time intervals highlighted by the automated annotation for manual review
+- `file_path_state_probabilities`:
+  the (desired) path for the file containing the state probabilities for each state and sample
 - `sampling_frequency_in_hz`:
   the sampling frequency of the raw signal(s)
 
@@ -316,12 +489,15 @@ contain the required columns with entries in the required format, an
 error will be raised detailing the missing columns or misrepresented
 column entries.
 
+An example spreadsheet can be found in the `data` folder. The
+corresponding recordings have been archived at
+[Zenodo](https://doi.org/10.5281/zenodo.10200481), and can be found in
+the `test` folder there.
 
-#### Customization
+
+### Customization
 
 Many pipeline customisations will only require changes in either `data_io.py` or `configuration.py`.
-
-##### Changes in input or output data formats
 
 Most function definitions in `data_io.py` are just aliases for other
 functions. In many cases, changes in the format of the input or the
@@ -350,9 +526,6 @@ load_dataframe = pandas.read_excel
 The function `load_dataframe` continues to be available, and can be
 used by all scripts in the pipeline just as before.
 
-
-##### Other changes
-
 Most other changes can be made by changing the values of variables in
 `configuration.py`. Please refer to the extensive comments in
 `configuration.py` for further guidance.
@@ -360,3 +533,33 @@ Most other changes can be made by changing the values of variables in
 If you cannot change an important aspect of the pipeline by changing
 either `data_io.py` or `configuration.py`, please raise an issue on
 the github issue tracker. Pull requests are -- of course -- very welcome.
+
+
+## Recent changes
+
+- 0.5.0 Added the ability to import hypnograms in epoch format, i.e. one-column CSVs with one row per epoch.
+- 0.4.0 Added support to export state probabilities (issue #15, issue #19).
+- 0.3.6 Fixed an issue in `02_test_state_annotation.py` that occurred when none of the test data sets had `undefined` states (issue #13).
+- 0.3.5 Fixed an issue in `05_manual_refinement.py` that occurred due to a change in the Matplotlib API (issue #16).
+- 0.3.4 Fixed an issue in `02_test_state_annotation.py` that occurred when testing with datasets of different lengths (issue #12).
+- 0.3.3 Fixed an issue in `04_run_state_annotation.py` that resulted in an incorrect rescaling of the state probability in the output figure.
+- 0.3.2 Fixed an issue with `MultivariateGaussianDistribution` that occurred due changes upstream in `pomegranate`.
+- 0.3.1 Removed occurrences of `np.int` and `np.float` (deprecated in recent numpy versions).
+- 0.3.0 Simplified installation.
+- 0.2.0 Clean-up of pipeline: moved `convert_sleepsign_files.py` and `convert_hypnogram_to_matlab_struct.py` to extensions.
+- 0.1.0 Improved README: added sections "Is this software the right choice for me?" and "What do I need?"
+
+
+## Contributing
+
+If you run into any problems, please raise an issue. Include any relevant code and data in a
+[minimal, reproducible example](https://stackoverflow.com/help/minimal-reproducible-example).
+Bug reports are, of course, always welcome. Please make sure to include the full error trace.
+If you submit a pull request that fixes a bug or implements a cool feature, I will probably worship the ground you walk on for the rest of the week. Probably.
+
+
+## License
+
+Somnotate has a dual license. It is licensed under the GPLv3 license
+for academic use only. For commercial or any other use of Somnotate or
+parts thereof, please be in contact: paul.brodersen@gmail.com.

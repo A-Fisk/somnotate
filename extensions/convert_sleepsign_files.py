@@ -7,7 +7,7 @@ Utilities to convert sleepsign output files.
 import numpy as np
 from somnotate._utils import convert_state_vector_to_state_intervals
 
-from data_io import (
+from example_pipeline.data_io import (
     ArgumentParser,
     load_dataframe,
     check_dataframe,
@@ -18,6 +18,7 @@ from data_io import (
 SLEEPSIGN_KEY = dict([
         ('w'  , 'awake'),
         ('wa' , 'awake (artefact)'),
+        ('ws' , 'awake (artefact)'),
         ('wb' , 'awake (artefact)'),
         ('m'  , 'sleep movement'),
         ('nr' , 'non-REM'),
@@ -132,7 +133,7 @@ if __name__ == '__main__':
     if args.only:
         datasets = datasets.loc[np.in1d(range(len(datasets)), args.only)]
 
-    for ii, dataset in datasets.iterrows():
+    for ii, (idx, dataset) in enumerate(datasets.iterrows()):
         print("{} ({}/{})".format(dataset['file_path_sleepsign_state_annotation'], ii+1, len(datasets)))
         old_file_path = dataset['file_path_sleepsign_state_annotation']
         new_file_path = dataset['file_path_manual_state_annotation']

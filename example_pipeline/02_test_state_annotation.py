@@ -7,6 +7,8 @@ manual created state annotation exists.
 import numpy as np
 import matplotlib.pyplot as plt
 
+from sklearn.metrics import confusion_matrix as get_confusion_matrix
+
 from somnotate._automated_state_annotation import StateAnnotator
 from somnotate._utils import convert_state_vector_to_state_intervals
 from somnotate._plotting import plot_signals
@@ -25,8 +27,7 @@ if __name__ == '__main__':
     from configuration import (
         state_to_int,
         int_to_state,
-        # plot_raw_signals,
-        plot_states,
+        time_resolution,
     )
 
     # --------------------------------------------------------------------------------
@@ -41,6 +42,7 @@ if __name__ == '__main__':
                         help  = 'Indices corresponding to the rows to use (default: all). Indexing starts at zero.'
     )
     parser.add_argument("--model", help="Use pre-trained model saved at /path/to/trained_model.pickle. If none is provided, the test is run in a hold-one-out fashion instead.")
+    parser.add_argument("--savefile", help="If provided with a /path/to/save/file.npz, the script saves the results of the analysis to file." )
 
     args = parser.parse_args()
 
@@ -50,10 +52,12 @@ if __name__ == '__main__':
     # check contents of spreadsheet
     check_dataframe(datasets,
                     columns = [
+                        'file_path_raw_signals',
                         'file_path_preprocessed_signals',
                         'file_path_manual_state_annotation',
                     ],
                     column_to_dtype = {
+                        'file_path_raw_signals' : str,
                         'file_path_preprocessed_signals' : str,
                         'file_path_manual_state_annotation' : str,
                     }
@@ -67,30 +71,37 @@ if __name__ == '__main__':
 
     signal_arrays = []
     state_vectors = []
-    for ii, dataset in datasets.iterrows():
+    for ii, (idx, dataset) in enumerate(datasets.iterrows()):
         print("{} ({}/{})".format(dataset['file_path_preprocessed_signals'], ii+1, len(datasets)))
 
         signal_array = load_preprocessed_signals(dataset['file_path_preprocessed_signals'])
-        state_vector = load_state_vector(dataset['file_path_manual_state_annotation'], mapping=state_to_int)
+        state_vector = load_state_vector(dataset['file_path_manual_state_annotation'],
+                                         mapping=state_to_int, time_resolution=time_resolution)
 
         signal_arrays.append(signal_array)
         state_vectors.append(state_vector)
 
     # --------------------------------------------------------------------------------
-    print('Train / test in a hold-one-out fashion...')
+    print('Testing...')
 
     total_datasets = len(datasets)
+
+    if (total_datasets < 2) and not args.model:
+        raise Exception("Training and testing in a hold-one-out fashion requires two or more datasets!")
+
     accuracy = np.zeros((total_datasets))
 
-    for ii, dataset in datasets.iterrows():
+    unique_states = np.unique(np.abs(np.concatenate(state_vectors)))
+    confusion = np.zeros((total_datasets, len(unique_states), len(unique_states)))
 
-        training_signal_arrays = [arr for jj, arr in enumerate(signal_arrays) if jj != ii]
-        training_state_vectors = [seq for jj, seq in enumerate(state_vectors) if jj != ii]
+    for ii, (idx, dataset) in enumerate(datasets.iterrows()):
 
         if args.model:
             annotator = StateAnnotator()
             annotator.load(args.model)
         else:
+            training_signal_arrays = [arr for jj, arr in enumerate(signal_arrays) if jj != ii]
+            training_state_vectors = [seq for jj, seq in enumerate(state_vectors) if jj != ii]
             annotator = StateAnnotator()
             annotator.fit(training_signal_arrays, training_state_vectors)
 
@@ -100,28 +111,66 @@ if __name__ == '__main__':
         accuracy[ii] = annotator.score(signal_arrays[ii], np.abs(state_vectors[ii]))
         print("{} ({}/{}) accuracy : {:.1f}%".format(dataset['file_path_preprocessed_signals'], ii+1, len(datasets), 100 * accuracy[ii]))
 
+        confusion[ii] = get_confusion_matrix(np.abs(state_vectors[ii]), annotator.predict(signal_arrays[ii]), labels=unique_states)
+
         if args.show:
 
-            fig, axes = plt.subplots(3, 1, sharex=True)
+            from data_io import load_raw_signals
 
-            # TODO plot "input" signals: either raw signals or preprocessed signals
+            from configuration import (
+                plot_raw_signals,
+                state_annotation_signals,
+                plot_states,
+            )
 
+            fig, axes = plt.subplots(4, 1, sharex=True)
+
+            # plot raw signals
+            check_dataframe(datasets,
+                            columns = [
+                                'file_path_raw_signals',
+                                'sampling_frequency_in_hz',
+                            ] + state_annotation_signals,
+                            column_to_dtype = {
+                                'file_path_raw_signals' : str,
+                                'sampling_frequency_in_hz' : (int, float),
+                            }
+            )
+            signal_labels = [dataset[column_name] for column_name in state_annotation_signals]
+            raw_signals = load_raw_signals(dataset['file_path_raw_signals'], signal_labels)
+            plot_raw_signals(
+                raw_signals,
+                sampling_frequency = dataset['sampling_frequency_in_hz'],
+                ax                 = axes[0],
+            )
+            axes[0].set_ylabel("Raw signals")
+
+            # LDA tranformed signals
             transformed_signals = annotator.transform(signal_arrays[ii])
-            plot_signals(transformed_signals, ax=axes[0])
-            axes[0].set_ylabel("Transformed signals")
+            plot_signals(transformed_signals, sampling_frequency=1./time_resolution, ax=axes[1])
+            axes[1].set_ylabel("Transformed signals")
 
             predicted_state_vector = annotator.predict(signal_arrays[ii])
-            predicted_states, predicted_intervals = convert_state_vector_to_state_intervals(predicted_state_vector, mapping=int_to_state)
-            plot_states(predicted_states, predicted_intervals, ax=axes[1])
-            axes[1].set_ylabel("Automated annotation")
+            predicted_states, predicted_intervals = \
+                convert_state_vector_to_state_intervals(
+                    predicted_state_vector, mapping=int_to_state, time_resolution=time_resolution)
+            plot_states(predicted_states, predicted_intervals, ax=axes[2])
+            axes[2].set_ylabel("Automated\nannotation")
 
-            states, intervals = convert_state_vector_to_state_intervals(state_vectors[ii], mapping=int_to_state)
-            plot_states(states, intervals, ax=axes[2])
-            axes[2].set_ylabel("Manual annotation")
+            states, intervals = convert_state_vector_to_state_intervals(
+                state_vectors[ii], mapping=int_to_state, time_resolution=time_resolution)
+            plot_states(states, intervals, ax=axes[3])
+            axes[3].set_ylabel("Manual\nannotation")
 
+            axes[-1].set_xlabel('Time [seconds]')
+
+            fig.suptitle(dataset['file_path_raw_signals'])
+            fig.align_ylabels()
             fig.tight_layout()
-            fig.suptitle(dataset['file_path_preprocessed_signals'])
 
     print("Mean accuracy +/- MSE: {:.2f}% +/- {:.2f}%".format(100*np.mean(accuracy), 100*np.std(accuracy)/np.sqrt(len(accuracy))))
+
+    if args.savefile:
+        np.savez(args.savefile, accuracy=accuracy, confusion=confusion)
 
     plt.show()

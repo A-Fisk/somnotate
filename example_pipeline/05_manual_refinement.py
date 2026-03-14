@@ -12,6 +12,7 @@ matplotlib.rcParams['agg.path.chunksize'] = 10000
 # mplstyle.use('fast')
 
 from somnotate._manual_state_annotation import TimeSeriesStateAnnotator
+from somnotate._plotting import subplots
 
 from data_io import (
     ArgumentParser,
@@ -68,7 +69,7 @@ if __name__ == '__main__':
                     ] + state_annotation_signals,
                     column_to_dtype = {
                         'file_path_raw_signals' : str,
-                        'sampling_frequency_in_hz' : (int, float, np.int, np.float, np.int64, np.float64),
+                        'sampling_frequency_in_hz' : (int, float),
                         'file_path_{}_state_annotation'.format(args.annotation_type) : str,
                         'file_path_refined_state_annotation' : str,
                         'file_path_review_intervals' : str,
@@ -81,7 +82,7 @@ if __name__ == '__main__':
     # turn off interactive mode if on
     plt.ioff()
 
-    for ii, dataset in datasets.iterrows():
+    for ii, (idx, dataset) in enumerate(datasets.iterrows()):
 
         print("{} ({}/{})".format(dataset['file_path_raw_signals'], ii+1, len(datasets)))
 
@@ -101,11 +102,11 @@ if __name__ == '__main__':
             (r'$\beta$' , 12.,  30., 'darkorchid'),
             (r'$\gamma$', 30., 100., 'crimson'),
         ]
-        psd_figure, axes = plt.subplots(1, total_raw_signals,
-                                     sharex=True, sharey=True,
-                                     figsize=(total_raw_signals * 4, 4))
+        psd_figure, axes = subplots(1, total_raw_signals,
+                                    sharex=True, sharey=True,
+                                    figsize=(total_raw_signals * 4, 4))
         psd_collections = []
-        for ii, (signal, ax, label) in enumerate(zip(raw_signals.T, axes, state_annotation_signal_labels)):
+        for ii, (signal, ax, label) in enumerate(zip(raw_signals.T, axes.ravel(), state_annotation_signal_labels)):
             frequencies, psd = welch(signal, dataset['sampling_frequency_in_hz'])
             for _, fmin, fmax, color in frequency_bands:
                 mask = (frequencies >= fmin) & (frequencies <= fmax)
@@ -113,7 +114,7 @@ if __name__ == '__main__':
             ax.set_title(label)
             ax.set_xlabel("Frequency [Hz]")
             ax.set_xlim(0, 30)
-        axes[0].set_ylabel("Power")
+        axes.ravel()[0].set_ylabel("Power")
 
         def update_psd_figure(selection_lower_bound, selection_upper_bound):
             fs = dataset['sampling_frequency_in_hz']
@@ -166,7 +167,7 @@ if __name__ == '__main__':
                                              state_display_order      = state_display_order,
                                              selection_callback       = update_psd_figure,
                                              default_selection_length = default_selection_length,
-                                             default_view_legnth      = default_view_length,
+                                             default_view_length      = default_view_length,
         )
         plt.show()
 
